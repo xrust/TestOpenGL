@@ -63,7 +63,7 @@ type TGLFontRenderer = class
     function GetTextWidth(const Text: string): Integer;
     function GetTextHeight(const Text: string): Integer;
     function GetCharWidth(Ch: Char): Integer;
-    procedure SetColor(R, G, B: Single; Alpha: Single = 1.0);overload;
+    procedure SetColor(R, G, B: Single; Alpha: Single = 1.0); overload;
     procedure SetColor(Color: TColor; Alpha: Single = 1.0); overload;
 
     // Свойства
@@ -231,29 +231,58 @@ end;
 
 //-----------------------------------------------------------------------------
 function TGLFontRenderer.GetTextureData(Bmp: TBitmap): TBytes;
+type
+  PRGBTriple = ^TRGBTriple;
+  TRGBTriple = packed record
+    B, G, R: Byte;
+  end;
+  PRGBQuad = ^TRGBQuad;
+  TRGBQuad = packed record
+    B, G, R, A: Byte;
+  end;
 var
   x, y: Integer;
-  Pixel: TColor;
   Brightness: Byte;
   Index: Integer;
+  ScanLine: Pointer;
+  PixelPtr: PRGBTriple;
+  PixelPtr32: PRGBQuad;
 begin
   SetLength(Result, FAtlasWidth * FAtlasHeight * 4); // RGBA
   Index := 0;
 
+  // Быстрое чтение через ScanLine
   for y := 0 to FAtlasHeight - 1 do begin
-    for x := 0 to FAtlasWidth - 1 do begin
-      Pixel := ColorToRGB(Bmp.Canvas.Pixels[x, y]);
+    ScanLine := Bmp.ScanLine[y];
 
-      // Берем яркость пикселя (R компонента, т.к. текст белый)
-      Brightness := GetRValue(Pixel);
+    if Bmp.PixelFormat = pf24bit then begin
+      PixelPtr := PRGBTriple(ScanLine);
+      for x := 0 to FAtlasWidth - 1 do begin
+        // Берем яркость (для белого текста все компоненты равны)
+        Brightness := PixelPtr^.R;
 
-      // RGBA формат
-      Result[Index] := 255;        // R - белый
-      Result[Index + 1] := 255;    // G - белый
-      Result[Index + 2] := 255;    // B - белый
-      Result[Index + 3] := Brightness; // A - прозрачность из яркости
+        // RGBA формат
+        Result[Index] := 255;        // R - белый
+        Result[Index + 1] := 255;    // G - белый
+        Result[Index + 2] := 255;    // B - белый
+        Result[Index + 3] := Brightness; // A - прозрачность
 
-      Inc(Index, 4);
+        Inc(Index, 4);
+        Inc(PixelPtr);
+      end;
+    end else if Bmp.PixelFormat = pf32bit then begin
+      PixelPtr32 := PRGBQuad(ScanLine);
+      for x := 0 to FAtlasWidth - 1 do begin
+        Brightness := PixelPtr32^.R;
+
+        Result[Index] := 255;
+        Result[Index + 1] := 255;
+        Result[Index + 2] := 255;
+        Result[Index + 3] := Brightness;
+
+        Inc(Index, 4);
+        Inc(PixelPtr32);
+      end;
     end;
   end;
 end;
