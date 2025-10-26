@@ -3,7 +3,8 @@
 uses
   Vcl.Forms,
   Unit1 in 'Unit1.pas' {Form1},
-  uGLFontRenderer in 'uGLFontRenderer.pas';
+  uGLFontRenderer in 'uGLFontRenderer.pas',
+  uGLFontRenderer2 in 'uGLFontRenderer2.pas';
 
 {$R *.res}
 

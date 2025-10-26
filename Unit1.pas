@@ -8,16 +8,21 @@ uses
   OpenGL, uGLFontRenderer;
 
 type
+  TGLPanel = class(TPanel)
+  protected
+    procedure WMPaint(var Message: TWMPaint); message WM_PAINT;
+  end;
+
   TForm1 = class(TForm)
-    Panel1: TPanel;
-    Timer1: TTimer;
     Button1: TButton;
+    Timer1: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
+    procedure FormShow(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
-    procedure Panel1Resize(Sender: TObject);
     procedure Button1Click(Sender: TObject);
   private
+    Panel1: TGLPanel;
     DC: HDC;
     RC: HGLRC;
     FontRenderer: TGLFontRenderer;
@@ -26,7 +31,7 @@ type
     procedure InitOpenGL;
     procedure SetupViewport;
     procedure RenderScene;
-  public
+    procedure Panel1Resize(Sender: TObject);
   end;
 
 var
@@ -36,9 +41,22 @@ implementation
 
 {$R *.dfm}
 
+{ TGLPanel }
+
+procedure TGLPanel.WMPaint(var Message: TWMPaint);
+begin
+  // Перехватываем WM_PAINT и вызываем рендеринг через форму
+  if Assigned(Owner) and (Owner is TForm1) then
+    TForm1(Owner).RenderScene;
+end;
+
+{ TForm1 }
+
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  // Настройка панели
+  // Создаем кастомную панель
+  Panel1 := TGLPanel.Create(Self);
+  Panel1.Parent := Self;
   Panel1.Align := alClient;
   Panel1.Color := clBlack;
   Panel1.DoubleBuffered := True;
@@ -53,6 +71,7 @@ begin
   Button1.Parent := Self;
   Button1.Left := 10;
   Button1.Top := 10;
+  Button1.BringToFront;
 
   FCounter := 0;
 
@@ -63,9 +82,6 @@ begin
   // ВАЖНО: Создаем рендереры ПОСЛЕ инициализации OpenGL контекста
   FontRenderer := TGLFontRenderer.Create('Tahoma', 10, False, False, True);
   FontBold := TGLFontRenderer.Create('Arial', 14, True, False, True);
-
-  // Первая отрисовка
-  RenderScene;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
@@ -80,6 +96,9 @@ begin
   wglMakeCurrent(0, 0);
   wglDeleteContext(RC);
   ReleaseDC(Panel1.Handle, DC);
+
+  // Освобождаем панель
+  Panel1.Free;
 end;
 
 procedure TForm1.InitOpenGL;
@@ -200,6 +219,12 @@ begin
   end;
 end;
 
+procedure TForm1.FormShow(Sender: TObject);
+begin
+  // Отрисовка при показе формы
+  RenderScene;
+end;
+
 procedure TForm1.Timer1Timer(Sender: TObject);
 begin
   Inc(FCounter);
@@ -208,6 +233,9 @@ end;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
+    Inc(FCounter);
+  RenderScene;
+
   if Timer1.Enabled then begin
     Timer1.Enabled := False;
     Button1.Caption := 'Start';
