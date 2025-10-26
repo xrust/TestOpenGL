@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls,
-  OpenGL;
+  OpenGL, Math;
 
 type
   TGLPanel = class(TPanel)
@@ -26,18 +26,22 @@ type
     DC: HDC;
     RC: HGLRC;
     FCounter: Integer;
-    FChartData: array of Single; // Массив данных графика
     procedure InitOpenGL;
     procedure SetupViewport;
     procedure RenderScene;
     procedure Panel1Resize(Sender: TObject);
-    procedure GenerateRandomData;
-  public
+    procedure GenerateRandomCandles;
   end;
-
+// Данные для свечей
+type TCandleData = record
+  Open: Single;
+  High: Single;
+  Low: Single;
+  Close: Single;
+end;
 var
   Form1: TForm1;
-
+  FCandles: array of TCandleData;
 implementation
 
 {$R *.dfm}
@@ -83,35 +87,58 @@ begin
   InitOpenGL;
   SetupViewport;
 
-  // Генерируем случайные данные для графика
+  // Генерируем случайные свечи для графика
   Randomize;
-  GenerateRandomData;
+  GenerateRandomCandles;
 end;
 
-procedure TForm1.GenerateRandomData;
+procedure TForm1.GenerateRandomCandles;
 var
-  i, DataCount: Integer;
+  i, CandlesCount: Integer;
   ChartWidth: Integer;
-  BaseValue, Delta: Single;
+  BasePrice, Change: Single;
+  Candle: TCandleData;
 begin
   ChartWidth := Panel1.Width - 75 - 5; // Ширина графика
-  DataCount := (ChartWidth div 16) + 1; // Количество точек (каждые 16 пикселей)
+  CandlesCount := (ChartWidth div 16) + 1; // Количество свечей (каждые 16 пикселей)
 
-  SetLength(FChartData, DataCount);
+  SetLength(FCandles, CandlesCount);
 
-  // Генерируем случайные данные (плавные изменения)
-  BaseValue := 0.5; // Начальное значение (середина графика)
+  // Генерируем случайные свечи
+  BasePrice := 0.5; // Начальная цена (середина графика)
 
-  for i := 0 to DataCount - 1 do begin
-    // Добавляем случайное изменение
-    Delta := (Random - 0.5) * 0.1; // Изменение от -0.05 до +0.05
-    BaseValue := BaseValue + Delta;
+  for i := 0 to CandlesCount - 1 do begin
+    // Open - цена открытия (текущая базовая цена)
+    Candle.Open := BasePrice;
 
-    // Ограничиваем значения от 0.1 до 0.9 (10%-90% высоты графика)
-    if BaseValue > 0.9 then BaseValue := 0.9;
-    if BaseValue < 0.1 then BaseValue := 0.1;
+    // Генерируем High и Low
+    Candle.High := BasePrice + Random * 0.08; // Максимум выше на 0-8%
+    Candle.Low := BasePrice - Random * 0.08;  // Минимум ниже на 0-8%
 
-    FChartData[i] := BaseValue;
+    // Close - цена закрытия (случайно выше или ниже Open)
+    Change := (Random - 0.5) * 0.06; // Изменение от -3% до +3%
+    Candle.Close := BasePrice + Change;
+
+    // Убеждаемся, что High действительно максимум
+    if Candle.Close > Candle.High then Candle.High := Candle.Close;
+    if Candle.Open > Candle.High then Candle.High := Candle.Open;
+
+    // Убеждаемся, что Low действительно минимум
+    if Candle.Close < Candle.Low then Candle.Low := Candle.Close;
+    if Candle.Open < Candle.Low then Candle.Low := Candle.Open;
+
+    // Ограничиваем значения от 0.1 до 0.9
+    if Candle.High > 0.9 then Candle.High := 0.9;
+    if Candle.Low < 0.1 then Candle.Low := 0.1;
+    if Candle.Open > 0.9 then Candle.Open := 0.9;
+    if Candle.Open < 0.1 then Candle.Open := 0.1;
+    if Candle.Close > 0.9 then Candle.Close := 0.9;
+    if Candle.Close < 0.1 then Candle.Close := 0.1;
+
+    FCandles[i] := Candle;
+
+    // Следующая базовая цена = Close текущей свечи
+    BasePrice := Candle.Close;
   end;
 end;
 
@@ -242,27 +269,60 @@ begin
     glVertex2f(ChartLeft, ChartBottom);
   glEnd;
 
-  // Рисуем график случайных данных (красная линия)
-  if Length(FChartData) > 1 then begin
-    glColor4f(1.0, 0.0, 0.0, 1.0); // Красный цвет
-    glLineWidth(1.0);
+  // Рисуем финансовые свечи
+  if Length(FCandles) > 0 then begin
+    var CandleWidth: Integer := 12; // Ширина тела свечи
 
-    glBegin(GL_LINE_STRIP);
+    for i := 0 to Length(FCandles) - 1 do begin
+      // Вычисляем координаты свечи
+      DataX := ChartLeft + (i * 16) + 8; // Центр свечи (каждые 16 пикселей)
 
-    for i := 0 to Length(FChartData) - 1 do begin
-      // Вычисляем координаты точки
-      DataX := ChartLeft + (i * 32); // Каждые 16 пикселей по горизонтали
-
-      // Преобразуем значение данных (0.0-1.0) в координату Y графика
-      DataY := ChartBottom - (FChartData[i] * ChartHeight);
-
-      // Проверяем, что точка в пределах графика
+      // Проверяем, что свеча в пределах графика
       if DataX > ChartRight then Break;
 
-      glVertex2f(DataX, DataY);
-    end;
+      // Преобразуем цены в координаты Y
+      var YOpen: Single := ChartBottom - (FCandles[i].Open * ChartHeight);
+      var YHigh: Single := ChartBottom - (FCandles[i].High * ChartHeight);
+      var YLow: Single := ChartBottom - (FCandles[i].Low * ChartHeight);
+      var YClose: Single := ChartBottom - (FCandles[i].Close * ChartHeight);
 
-    glEnd;
+      // Определяем цвет свечи (зеленая если выросла, красная если упала)
+      var IsGreen: Boolean := FCandles[i].Close > FCandles[i].Open;
+
+      if IsGreen then
+        glColor4f(0.0, 1.0, 0.0, 1.0) // Зеленый
+      else
+        glColor4f(1.0, 0.0, 0.0, 1.0); // Красный
+
+      // Рисуем тень (фитиль) - тонкая линия от Low до High
+      glLineWidth(1.0);
+      glBegin(GL_LINES);
+        glVertex2f(DataX, YHigh);
+        glVertex2f(DataX, YLow);
+      glEnd;
+
+      // Рисуем тело свечи - прямоугольник от Open до Close
+      var BodyTop: Single := Min(YOpen, YClose);
+      var BodyBottom: Single := Max(YOpen, YClose);
+      var BodyHeight: Single := BodyBottom - BodyTop;
+
+      // Если тело слишком маленькое (цены почти равны), рисуем горизонтальную линию
+      if BodyHeight < 2 then begin
+        glLineWidth(1.0);
+        glBegin(GL_LINES);
+          glVertex2f(DataX - CandleWidth div 2, YOpen);
+          glVertex2f(DataX + CandleWidth div 2, YOpen);
+        glEnd;
+      end else begin
+        // Рисуем закрашенное тело свечи
+        glBegin(GL_QUADS);
+          glVertex2f(DataX - CandleWidth div 2, BodyTop);
+          glVertex2f(DataX + CandleWidth div 2, BodyTop);
+          glVertex2f(DataX + CandleWidth div 2, BodyBottom);
+          glVertex2f(DataX - CandleWidth div 2, BodyBottom);
+        glEnd;
+      end;
+    end;
   end;
 
   SwapBuffers(DC);
@@ -272,7 +332,7 @@ procedure TForm1.Panel1Resize(Sender: TObject);
 begin
   if RC <> 0 then begin
     SetupViewport;
-    GenerateRandomData; // Пересоздаем данные при изменении размера
+    GenerateRandomCandles; // Пересоздаем свечи при изменении размера
     RenderScene;
   end;
 end;
@@ -284,22 +344,45 @@ begin
 end;
 
 procedure TForm1.Timer1Timer(Sender: TObject);
+var
+  NewCandle: TCandleData;
+  Change: Single;
 begin
   Inc(FCounter);
 
-  // Обновляем данные графика (добавляем новую точку)
-  if Length(FChartData) > 0 then begin
-    // Сдвигаем данные влево
-    Move(FChartData[1], FChartData[0], (Length(FChartData) - 1) * SizeOf(Single));
+  // Обновляем свечи (добавляем новую свечу)
+  if Length(FCandles) > 0 then begin
+    // Сдвигаем свечи влево
+    Move(FCandles[1], FCandles[0], (Length(FCandles) - 1) * SizeOf(TCandleData));
 
-    // Добавляем новую случайную точку в конец
-    var Delta: Single := (Random - 0.5) * 0.1;
-    var NewValue: Single := FChartData[Length(FChartData) - 2] + Delta;
+    // Создаем новую свечу на основе последней
+    var LastClose: Single := FCandles[Length(FCandles) - 2].Close;
 
-    if NewValue > 0.9 then NewValue := 0.9;
-    if NewValue < 0.1 then NewValue := 0.1;
+    NewCandle.Open := LastClose;
 
-    FChartData[Length(FChartData) - 1] := NewValue;
+    // Генерируем High и Low
+    NewCandle.High := LastClose + Random * 0.08;
+    NewCandle.Low := LastClose - Random * 0.08;
+
+    // Close - случайное изменение
+    Change := (Random - 0.5) * 0.06;
+    NewCandle.Close := LastClose + Change;
+
+    // Корректируем High и Low
+    if NewCandle.Close > NewCandle.High then NewCandle.High := NewCandle.Close;
+    if NewCandle.Open > NewCandle.High then NewCandle.High := NewCandle.Open;
+    if NewCandle.Close < NewCandle.Low then NewCandle.Low := NewCandle.Close;
+    if NewCandle.Open < NewCandle.Low then NewCandle.Low := NewCandle.Open;
+
+    // Ограничиваем значения
+    if NewCandle.High > 0.9 then NewCandle.High := 0.9;
+    if NewCandle.Low < 0.1 then NewCandle.Low := 0.1;
+    if NewCandle.Open > 0.9 then NewCandle.Open := 0.9;
+    if NewCandle.Open < 0.1 then NewCandle.Open := 0.1;
+    if NewCandle.Close > 0.9 then NewCandle.Close := 0.9;
+    if NewCandle.Close < 0.1 then NewCandle.Close := 0.1;
+
+    FCandles[Length(FCandles) - 1] := NewCandle;
   end;
 
   RenderScene;
@@ -307,24 +390,13 @@ end;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
-Inc(FCounter);
-
-  // Обновляем данные графика (добавляем новую точку)
-  if Length(FChartData) > 0 then begin
-    // Сдвигаем данные влево
-    Move(FChartData[1], FChartData[0], (Length(FChartData) - 1) * SizeOf(Single));
-
-    // Добавляем новую случайную точку в конец
-    var Delta: Single := (Random - 0.5) * 0.1;
-    var NewValue: Single := FChartData[Length(FChartData) - 2] + Delta;
-
-    if NewValue > 0.9 then NewValue := 0.9;
-    if NewValue < 0.1 then NewValue := 0.1;
-
-    FChartData[Length(FChartData) - 1] := NewValue;
+  if Timer1.Enabled then begin
+    Timer1.Enabled := False;
+    Button1.Caption := 'Start';
+  end else begin
+    Timer1.Enabled := True;
+    Button1.Caption := 'Stop';
   end;
-
-  RenderScene;
 end;
 
 end.
