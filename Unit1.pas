@@ -124,8 +124,10 @@ begin
   // Настройка OpenGL
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-  glEnable(GL_LINE_SMOOTH);
-  glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
+  // Отключаем сглаживание линий для четких пикселей
+  glDisable(GL_LINE_SMOOTH);
+  glDisable(GL_POINT_SMOOTH);
 end;
 
 procedure TForm1.SetupViewport;
@@ -144,6 +146,7 @@ var
   ChartWidth, ChartHeight: Integer;
   GridSize: Integer;
   x, y: Single;
+  i: Integer;
 begin
   wglMakeCurrent(DC, RC);
 
@@ -160,31 +163,41 @@ begin
   ChartHeight := ChartBottom - ChartTop;
   GridSize := 32;
 
-  // Рисуем сетку (белый цвет, толщина 1 пиксель)
-  glColor4f(1.0, 1.0, 1.0, 1.0); // Полупрозрачная сетка
-  glLineWidth(1.0);
+  // Рисуем сетку точками (белый цвет, непрозрачная)
+  glColor4f(1.0, 1.0, 1.0, 1.0);
+  glPointSize(1.0);
 
-  glBegin(GL_LINES);
+  glBegin(GL_POINTS);
 
-  // Вертикальные линии сетки
-  x := ChartLeft;
-  while x <= ChartRight do begin
-    glVertex2f(x, ChartTop);
-    glVertex2f(x, ChartBottom);
+  // Вертикальные линии сетки (точками)
+  x := ChartLeft+32;
+  while x <= ChartRight-1 do begin
+    y := ChartTop +1;
+    while y <= ChartBottom do begin
+      // Рисуем точку через каждые 2 пикселя (эффект пунктира)
+      if Trunc(y - ChartTop) mod 4 < 2 then
+        glVertex2f(x, y);
+      y := y + 1;
+    end;
     x := x + GridSize;
   end;
 
-  // Горизонтальные линии сетки
-  y := ChartTop;
+  // Горизонтальные линии сетки (точками)
+  y := ChartTop+1;
   while y <= ChartBottom do begin
-    glVertex2f(ChartLeft, y);
-    glVertex2f(ChartRight, y);
+    x := ChartLeft;
+    while x <= ChartRight-1 do begin
+      // Рисуем точку через каждые 2 пикселя (эффект пунктира)
+      if Trunc(x - ChartLeft) mod 4 < 2 then
+        glVertex2f(x, y);
+      x := x + 1;
+    end;
     y := y + GridSize;
   end;
 
   glEnd;
 
-  // Рисуем рамку графика (белый цвет, толщина 1 пиксель)
+  // Рисуем рамку графика (белый цвет, сплошная линия, толщина 1 пиксель)
   glColor4f(1.0, 1.0, 1.0, 1.0);
   glLineWidth(1.0);
 
