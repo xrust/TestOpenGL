@@ -1,7 +1,8 @@
 ﻿unit uGLFontRenderer;
 {//----------------------------------------------------------------------------
-    OpenGL Font Renderer with Font Atlas
-    Качественный рендеринг текста в OpenGL с использованием шрифтового атласа
+    OpenGL Font Renderer with Unicode Font Atlas
+    Качественный рендеринг Unicode текста в OpenGL с использованием шрифтового атласа
+    Ver 4.0 support unoicode
 }//----------------------------------------------------------------------------
 interface
 //-----------------------------------------------------------------------------
@@ -11,6 +12,7 @@ uses
   System.Classes,
   System.Types,
   System.UITypes,
+  System.Generics.Collections,
   VCL.Graphics,
   OpenGL;
 
@@ -31,7 +33,7 @@ type TGLFontRenderer = class
 
   private
     FTextureID: GLuint;
-    FCharMap: array[0..255] of TCharInfo;
+    FCharMap: TDictionary<WideChar, TCharInfo>; // Unicode символы
     FFontName: string;
     FFontSize: Integer;
     FLineHeight: Integer;
@@ -45,6 +47,7 @@ type TGLFontRenderer = class
     procedure BuildFontAtlas;
     procedure FreeFontAtlas;
     function GetTextureData(Bmp: TBitmap): TBytes;
+    function GetDefaultCharSet: TArray<WideChar>;
 
   public
     constructor Create(const FontName: string = 'Tahoma'; FontSize: Integer = 10;
@@ -62,7 +65,7 @@ type TGLFontRenderer = class
     // Вспомогательные методы
     function GetTextWidth(const Text: string): Integer;
     function GetTextHeight(const Text: string): Integer;
-    function GetCharWidth(Ch: Char): Integer;
+    function GetCharWidth(Ch: WideChar): Integer;
     procedure SetColor(R, G, B: Single; Alpha: Single = 1.0); overload;
     procedure SetColor(Color: TColor; Alpha: Single = 1.0); overload;
 
@@ -95,6 +98,8 @@ begin
   FTextureID := 0;
   FInitialized := False;
 
+  FCharMap := TDictionary<WideChar, TCharInfo>.Create;
+
   BuildFontAtlas;
 end;
 
@@ -102,7 +107,41 @@ end;
 destructor TGLFontRenderer.Destroy;
 begin
   FreeFontAtlas;
+  FCharMap.Free;
   inherited;
+end;
+
+//-----------------------------------------------------------------------------
+function TGLFontRenderer.GetDefaultCharSet: TArray<WideChar>;
+var
+  List: TList<WideChar>;
+  i: Integer;
+begin
+  List := TList<WideChar>.Create;
+  try
+    // Базовые ASCII символы (32-126)
+    for i := 32 to 126 do
+      List.Add(WideChar(i));
+
+    // Кириллица (А-Я, а-я) - основные символы
+    for i := $0410 to $044F do // А-Я, а-я
+      List.Add(WideChar(i));
+
+    List.Add(WideChar($0401)); // Ё
+    List.Add(WideChar($0451)); // ё
+
+    // Дополнительные популярные символы
+    List.Add('€'); // Евро
+    List.Add('°'); // Градус
+    List.Add('±'); // Плюс-минус
+    List.Add('×'); // Умножение
+    List.Add('÷'); // Деление
+    List.Add('№'); // Номер
+
+    Result := List.ToArray;
+  finally
+    List.Free;
+  end;
 end;
 
 //-----------------------------------------------------------------------------
@@ -110,10 +149,13 @@ procedure TGLFontRenderer.BuildFontAtlas;
 var
   Bmp: TBitmap;
   i, x, y, maxH: Integer;
-  Ch: Char;
+  Ch: WideChar;
   CharWidth, CharHeight: Integer;
   TextureData: TBytes;
   FontStyle: TFontStyles;
+  CharSet: TArray<WideChar>;
+  CharInfo: TCharInfo;
+  TextToDraw: string;
 begin
   Bmp := TBitmap.Create;
   try
@@ -121,6 +163,7 @@ begin
     Bmp.Canvas.Font.Name := FFontName;
     Bmp.Canvas.Font.Size := FFontSize;
     Bmp.Canvas.Font.Color := clWhite;
+    Bmp.Canvas.Font.Charset := DEFAULT_CHARSET;
 
     FontStyle := [];
     if FBold then FontStyle := FontStyle + [fsBold];
@@ -132,44 +175,33 @@ begin
     else
       Bmp.Canvas.Font.Quality := fqNonAntialiased;
 
-    Bmp.PixelFormat := pf32bit;
+    Bmp.PixelFormat := pf24bit;
 
-    // Определяем размер атласа (увеличенный для поддержки всех символов)
+    // Размер атласа
     FAtlasWidth := 1024;
     FAtlasHeight := 512;
-    FLineHeight := Bmp.Canvas.TextHeight('Аy') + 4; // Учитываем высокие символы
+    FLineHeight := Bmp.Canvas.TextHeight('Щy') + 4; // Учитываем высокие символы кириллицы
 
     Bmp.Width := FAtlasWidth;
     Bmp.Height := FAtlasHeight;
     Bmp.Canvas.Brush.Color := clBlack;
     Bmp.Canvas.FillRect(Rect(0, 0, FAtlasWidth, FAtlasHeight));
 
-    // Инициализация информации о символах
-    for i := 0 to 255 do begin
-      FCharMap[i].X := 0;
-      FCharMap[i].Y := 0;
-      FCharMap[i].Width := 0;
-      FCharMap[i].Height := 0;
-      FCharMap[i].OffsetX := 0;
-      FCharMap[i].OffsetY := 0;
-      FCharMap[i].AdvanceX := FLineHeight div 2;
-    end;
+    // Получаем набор символов для атласа
+    CharSet := GetDefaultCharSet;
 
     // Рисуем все символы в атлас
     x := 4;
     y := 4;
     maxH := 0;
 
-    for i := 0 to 255 do begin
-      Ch := Chr(i);
+    for i := 0 to Length(CharSet) - 1 do begin
+      Ch := CharSet[i];
+      TextToDraw := string(Ch);
 
-      // Пропускаем управляющие символы
-      if (i < 32) and (i <> 9) then Continue;
+      CharWidth := Bmp.Canvas.TextWidth(TextToDraw);
+      CharHeight := Bmp.Canvas.TextHeight(TextToDraw);
 
-      CharWidth := Bmp.Canvas.TextWidth(Ch);
-      CharHeight := Bmp.Canvas.TextHeight(Ch);
-
-      // Пропускаем нулевые символы
       if (CharWidth <= 0) or (CharHeight <= 0) then Continue;
 
       // Переход на новую строку если не влезает
@@ -178,22 +210,23 @@ begin
         y := y + maxH + 4;
         maxH := 0;
 
-        // Проверка переполнения атласа
         if y + CharHeight + 4 > FAtlasHeight then
-          Break;
+          Break; // Атлас заполнен
       end;
 
-      // Рисуем символ на черном фоне
-      Bmp.Canvas.TextOut(x, y, Ch);
+      // Рисуем символ
+      Bmp.Canvas.TextOut(x, y, TextToDraw);
 
       // Сохраняем информацию о символе
-      FCharMap[i].X := x;
-      FCharMap[i].Y := y;
-      FCharMap[i].Width := CharWidth;
-      FCharMap[i].Height := CharHeight;
-      FCharMap[i].OffsetX := 0;
-      FCharMap[i].OffsetY := 0;
-      FCharMap[i].AdvanceX := CharWidth + 1;
+      CharInfo.X := x;
+      CharInfo.Y := y;
+      CharInfo.Width := CharWidth;
+      CharInfo.Height := CharHeight;
+      CharInfo.OffsetX := 0;
+      CharInfo.OffsetY := 0;
+      CharInfo.AdvanceX := CharWidth + 1;
+
+      FCharMap.AddOrSetValue(Ch, CharInfo);
 
       x := x + CharWidth + 4;
       if CharHeight > maxH then maxH := CharHeight;
@@ -218,7 +251,7 @@ begin
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
 
-    // Загружаем текстуру с альфа каналом
+    // Загружаем текстуру
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, FAtlasWidth, FAtlasHeight,
                  0, GL_RGBA, GL_UNSIGNED_BYTE, @TextureData[0]);
 
@@ -236,17 +269,12 @@ type
   TRGBTriple = packed record
     B, G, R: Byte;
   end;
-  PRGBQuad = ^TRGBQuad;
-  TRGBQuad = packed record
-    B, G, R, A: Byte;
-  end;
 var
   x, y: Integer;
   Brightness: Byte;
   Index: Integer;
   ScanLine: Pointer;
   PixelPtr: PRGBTriple;
-  PixelPtr32: PRGBQuad;
 begin
   SetLength(Result, FAtlasWidth * FAtlasHeight * 4); // RGBA
   Index := 0;
@@ -254,35 +282,20 @@ begin
   // Быстрое чтение через ScanLine
   for y := 0 to FAtlasHeight - 1 do begin
     ScanLine := Bmp.ScanLine[y];
+    PixelPtr := PRGBTriple(ScanLine);
 
-    if Bmp.PixelFormat = pf24bit then begin
-      PixelPtr := PRGBTriple(ScanLine);
-      for x := 0 to FAtlasWidth - 1 do begin
-        // Берем яркость (для белого текста все компоненты равны)
-        Brightness := PixelPtr^.R;
+    for x := 0 to FAtlasWidth - 1 do begin
+      // Берем яркость (для белого текста все компоненты равны)
+      Brightness := PixelPtr^.R;
 
-        // RGBA формат
-        Result[Index] := 255;        // R - белый
-        Result[Index + 1] := 255;    // G - белый
-        Result[Index + 2] := 255;    // B - белый
-        Result[Index + 3] := Brightness; // A - прозрачность
+      // RGBA формат
+      Result[Index] := 255;        // R - белый
+      Result[Index + 1] := 255;    // G - белый
+      Result[Index + 2] := 255;    // B - белый
+      Result[Index + 3] := Brightness; // A - прозрачность
 
-        Inc(Index, 4);
-        Inc(PixelPtr);
-      end;
-    end else if Bmp.PixelFormat = pf32bit then begin
-      PixelPtr32 := PRGBQuad(ScanLine);
-      for x := 0 to FAtlasWidth - 1 do begin
-        Brightness := PixelPtr32^.R;
-
-        Result[Index] := 255;
-        Result[Index + 1] := 255;
-        Result[Index + 2] := 255;
-        Result[Index + 3] := Brightness;
-
-        Inc(Index, 4);
-        Inc(PixelPtr32);
-      end;
+      Inc(Index, 4);
+      Inc(PixelPtr);
     end;
   end;
 end;
@@ -294,6 +307,7 @@ begin
     glDeleteTextures(1, @FTextureID);
     FTextureID := 0;
   end;
+  FCharMap.Clear;
   FInitialized := False;
 end;
 
@@ -307,8 +321,7 @@ end;
 procedure TGLFontRenderer.DrawText(X, Y: Single; const Text: string; R, G, B, Alpha: Single);
 var
   i: Integer;
-  Ch: Char;
-  CharCode: Integer;
+  Ch: WideChar;
   Info: TCharInfo;
   XPos: Single;
   tx1, ty1, tx2, ty2: Single;
@@ -326,21 +339,21 @@ begin
   glBegin(GL_QUADS);
   for i := 1 to Length(Text) do begin
     Ch := Text[i];
-    CharCode := Ord(Ch);
 
-    // Проверяем диапазон
-    if (CharCode < 0) or (CharCode > 255) then begin
-      XPos := XPos + FLineHeight div 2;
+    // Проверяем наличие символа в атласе
+    if not FCharMap.TryGetValue(Ch, Info) then begin
+      // Символ не найден - используем пробел или пропускаем
+      if Ch = ' ' then
+        XPos := XPos + FLineHeight div 3
+      else
+        XPos := XPos + FLineHeight div 2;
       Continue;
     end;
 
-    Info := FCharMap[CharCode];
-
     // Пропускаем символы без размера
     if (Info.Width <= 0) or (Info.Height <= 0) then begin
-      // Для пробела и табуляции используем AdvanceX
-      if (CharCode = 32) or (CharCode = 9) then
-        XPos := XPos + Info.AdvanceX;
+      if Ch = ' ' then
+        XPos := XPos + FLineHeight div 3;
       Continue;
     end;
 
@@ -412,7 +425,7 @@ begin
   Lines := TStringList.Create;
   try
     if WordWrap then begin
-      // Простой word wrap (можно улучшить)
+      // Простой word wrap
       Line := '';
       for i := 1 to Length(Text) do begin
         Line := Line + Text[i];
@@ -444,13 +457,18 @@ end;
 function TGLFontRenderer.GetTextWidth(const Text: string): Integer;
 var
   i: Integer;
-  CharCode: Integer;
+  Ch: WideChar;
+  Info: TCharInfo;
 begin
   Result := 0;
   for i := 1 to Length(Text) do begin
-    CharCode := Ord(Text[i]);
-    if (CharCode >= 0) and (CharCode <= 255) then
-      Result := Result + FCharMap[CharCode].AdvanceX;
+    Ch := Text[i];
+    if FCharMap.TryGetValue(Ch, Info) then
+      Result := Result + Info.AdvanceX
+    else if Ch = ' ' then
+      Result := Result + FLineHeight div 3
+    else
+      Result := Result + FLineHeight div 2;
   end;
 end;
 
@@ -464,13 +482,14 @@ begin
 end;
 
 //-----------------------------------------------------------------------------
-function TGLFontRenderer.GetCharWidth(Ch: Char): Integer;
+function TGLFontRenderer.GetCharWidth(Ch: WideChar): Integer;
 var
-  CharCode: Integer;
+  Info: TCharInfo;
 begin
-  CharCode := Ord(Ch);
-  if (CharCode >= 0) and (CharCode <= 255) then
-    Result := FCharMap[CharCode].AdvanceX
+  if FCharMap.TryGetValue(Ch, Info) then
+    Result := Info.AdvanceX
+  else if Ch = ' ' then
+    Result := FLineHeight div 3
   else
     Result := FLineHeight div 2;
 end;

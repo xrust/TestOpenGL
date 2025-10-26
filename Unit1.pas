@@ -14,14 +14,14 @@ type
   end;
 
   TForm1 = class(TForm)
-    Button1: TButton;
     Timer1: TTimer;
+    Button1: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     procedure Button1Click(Sender: TObject);
-  public
+  private
     Panel1: TGLPanel;
     DC: HDC;
     RC: HGLRC;
@@ -54,7 +54,17 @@ end;
 
 procedure TForm1.FormCreate(Sender: TObject);
 begin
-  // Создаем кастомную панель
+  // Настройка таймера для анимации (до создания панели)
+  Timer1.Interval := 16; // ~60 FPS
+  Timer1.Enabled := False;
+
+  // Настройка кнопки (до создания панели)
+  Button1.Caption := 'Start';
+  Button1.Left := 10;
+  Button1.Top := 10;
+  Button1.BringToFront;
+
+  // Создаем кастомную панель (после кнопки, чтобы она не перекрывала)
   Panel1 := TGLPanel.Create(Self);
   Panel1.Parent := Self;
   Panel1.Align := alClient;
@@ -62,15 +72,8 @@ begin
   Panel1.DoubleBuffered := True;
   Panel1.OnResize := Panel1Resize;
 
-  // Настройка таймера для анимации
-  Timer1.Interval := 16; // ~60 FPS
-  Timer1.Enabled := False;
-
-  // Настройка кнопки
-  Button1.Caption := 'Start';
-  Button1.Parent := Self;
-  Button1.Left := 10;
-  Button1.Top := 10;
+  // Кнопка должна быть поверх панели
+  Button1.Parent := Panel1;
   Button1.BringToFront;
 
   FCounter := 0;
@@ -152,7 +155,7 @@ begin
   wglMakeCurrent(DC, RC);
 
   // Очистка экрана (темно-синий фон)
-  glClearColor(0, 0, 0, 1.0);
+  glClearColor(0.1, 0.1, 0.2, 1.0);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Рисуем прямоугольник для демонстрации
@@ -233,9 +236,6 @@ end;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
-    Inc(FCounter);
-  RenderScene;
-
   if Timer1.Enabled then begin
     Timer1.Enabled := False;
     Button1.Caption := 'Start';
