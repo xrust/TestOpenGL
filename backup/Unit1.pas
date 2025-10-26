@@ -5,7 +5,7 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls,
-  OpenGL;
+  OpenGL, uGLFontRenderer;
 
 type
   TGLPanel = class(TPanel)
@@ -25,12 +25,13 @@ type
     Panel1: TGLPanel;
     DC: HDC;
     RC: HGLRC;
+    FontRenderer: TGLFontRenderer;
+    FontBold: TGLFontRenderer;
     FCounter: Integer;
     procedure InitOpenGL;
     procedure SetupViewport;
     procedure RenderScene;
     procedure Panel1Resize(Sender: TObject);
-  public
   end;
 
 var
@@ -80,11 +81,19 @@ begin
   // Инициализация OpenGL
   InitOpenGL;
   SetupViewport;
+
+  // ВАЖНО: Создаем рендереры ПОСЛЕ инициализации OpenGL контекста
+  FontRenderer := TGLFontRenderer.Create('Tahoma', 10, False, False, True);
+  FontBold := TGLFontRenderer.Create('Arial', 14, True, False, True);
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
 begin
   Timer1.Enabled := False;
+
+  // Освобождаем рендереры
+  FontRenderer.Free;
+  FontBold.Free;
 
   // Освобождаем OpenGL контекст
   wglMakeCurrent(0, 0);
@@ -140,60 +149,67 @@ end;
 
 procedure TForm1.RenderScene;
 var
-  ChartLeft, ChartTop, ChartRight, ChartBottom: Integer;
-  ChartWidth, ChartHeight: Integer;
-  GridSize: Integer;
-  x, y: Single;
+  txt: string;
+  offset: Single;
 begin
   wglMakeCurrent(DC, RC);
 
-  // Очистка экрана (темный фон)
-  glClearColor(0.05, 0.05, 0.1, 1.0);
+  // Очистка экрана (темно-синий фон)
+  glClearColor(0.1, 0.1, 0.2, 1.0);
   glClear(GL_COLOR_BUFFER_BIT);
 
-  // Параметры графика
-  ChartLeft := 5;
-  ChartTop := 5;
-  ChartRight := Panel1.Width - 75;
-  ChartBottom := Panel1.Height - 25;
-  ChartWidth := ChartRight - ChartLeft;
-  ChartHeight := ChartBottom - ChartTop;
-  GridSize := 32;
-
-  // Рисуем сетку (белый цвет, толщина 1 пиксель)
-  glColor4f(1.0, 1.0, 1.0, 1.0); // Полупрозрачная сетка
-  glLineWidth(1.0);
-
-  glBegin(GL_LINES);
-
-  // Вертикальные линии сетки
-  x := ChartLeft;
-  while x <= ChartRight do begin
-    glVertex2f(x, ChartTop);
-    glVertex2f(x, ChartBottom);
-    x := x + GridSize;
-  end;
-
-  // Горизонтальные линии сетки
-  y := ChartTop;
-  while y <= ChartBottom do begin
-    glVertex2f(ChartLeft, y);
-    glVertex2f(ChartRight, y);
-    y := y + GridSize;
-  end;
-
+  // Рисуем прямоугольник для демонстрации
+  glColor4f(0.2, 0.2, 0.3, 1.0);
+  glBegin(GL_QUADS);
+    glVertex2f(50, 150);
+    glVertex2f(Panel1.Width - 50, 150);
+    glVertex2f(Panel1.Width - 50, 250);
+    glVertex2f(50, 250);
   glEnd;
 
-  // Рисуем рамку графика (белый цвет, толщина 1 пиксель)
-  glColor4f(1.0, 1.0, 1.0, 1.0);
-  glLineWidth(1.0);
+  // === Примеры рисования текста ===
 
-  glBegin(GL_LINE_LOOP);
-    glVertex2f(ChartLeft, ChartTop);
-    glVertex2f(ChartRight, ChartTop);
-    glVertex2f(ChartRight, ChartBottom);
-    glVertex2f(ChartLeft, ChartBottom);
-  glEnd;
+  // 1. Простой белый текст
+  FontRenderer.DrawText(10, 10, 'Hello OpenGL Font Renderer!');
+
+  // 2. Цветной текст (красный)
+  FontRenderer.DrawText(10, 30, 'Red Text Example', 1.0, 0.0, 0.0, 1.0);
+
+  // 3. Зеленый текст с прозрачностью
+  FontRenderer.DrawText(10, 50, 'Green Semi-Transparent', 0.0, 1.0, 0.0, 0.6);
+
+  // 4. Жирный шрифт (синий)
+  FontBold.DrawText(10, 70, 'Bold Font Example', 0.3, 0.6, 1.0, 1.0);
+
+  // 5. Анимированный текст
+  offset := Sin(FCounter * 0.05) * 20;
+  FontBold.DrawText(10 + offset, 100, 'Спецсимволы: № Ё ё € ° ± × ÷', 1.0, 1.0, 0.0, 1.0);
+
+  // 6. Выравнивание по центру
+  FontBold.DrawTextAligned(50, 160, Panel1.Width - 100, 80,
+                           'Привет это Клод',
+                           taCenter, vaMiddle);
+
+  // 7. Текст с использованием TColor
+  FontRenderer.SetColor(clYellow, 1.0);
+  FontRenderer.DrawText(10, 270, 'Using TColor (Yellow)');
+
+  // 8. Счетчик кадров
+  txt := Format('Frame: %d', [FCounter]);
+  FontRenderer.SetColor(clWhite, 1.0);
+  FontRenderer.DrawText(Panel1.Width - 100, 10, txt);
+
+  // 9. Информация о размерах
+  txt := Format('Width: %d  Height: %d',
+                [FontRenderer.GetTextWidth('Sample Text'),
+                 FontRenderer.GetTextHeight('Sample Text')]);
+  FontRenderer.DrawText(10, Panel1.Height - 30, txt);
+
+  // 10. Многострочный текст в рамке
+  FontRenderer.DrawTextBox(Panel1.Width - 250, 300, 230, 100,
+    'This is a multi-line text example with automatic word wrapping. ' +
+    'The text will wrap when it reaches the edge of the box.',
+    10, True);
 
   SwapBuffers(DC);
 end;
