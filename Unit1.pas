@@ -183,11 +183,11 @@ begin
 
   // 5. Анимированный текст
   offset := Sin(FCounter * 0.05) * 20;
-  FontBold.DrawText(10 + offset, 100, 'Animated Text', 1.0, 1.0, 0.0, 1.0);
+  FontBold.DrawText(10 + offset, 100, 'Спецсимволы: № Ё ё € ° ± × ÷', 1.0, 1.0, 0.0, 1.0);
 
   // 6. Выравнивание по центру
   FontBold.DrawTextAligned(50, 160, Panel1.Width - 100, 80,
-                           'Text Centered in Box',
+                           'Привет это Клод',
                            taCenter, vaMiddle);
 
   // 7. Текст с использованием TColor
