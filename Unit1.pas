@@ -21,7 +21,7 @@ type
     procedure FormShow(Sender: TObject);
     procedure Timer1Timer(Sender: TObject);
     procedure Button1Click(Sender: TObject);
-  private
+  public
     Panel1: TGLPanel;
     DC: HDC;
     RC: HGLRC;
@@ -152,7 +152,7 @@ begin
   wglMakeCurrent(DC, RC);
 
   // Очистка экрана (темно-синий фон)
-  glClearColor(0.1, 0.1, 0.2, 1.0);
+  glClearColor(0, 0, 0, 1.0);
   glClear(GL_COLOR_BUFFER_BIT);
 
   // Рисуем прямоугольник для демонстрации

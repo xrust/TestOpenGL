@@ -2,8 +2,8 @@ object Form1: TForm1
   Left = 0
   Top = 0
   Caption = 'OpenGL Font Renderer Demo'
-  ClientHeight = 441
-  ClientWidth = 624
+  ClientHeight = 500
+  ClientWidth = 800
   Color = clBtnFace
   DoubleBuffered = True
   Font.Charset = DEFAULT_CHARSET
@@ -17,8 +17,8 @@ object Form1: TForm1
   OnShow = FormShow
   TextHeight = 15
   object Button1: TButton
-    Left = 541
-    Top = 408
+    Left = 8
+    Top = 8
     Width = 75
     Height = 25
     Caption = 'Start'
@@ -26,8 +26,10 @@ object Form1: TForm1
     OnClick = Button1Click
   end
   object Timer1: TTimer
+    Enabled = False
+    Interval = 16
     OnTimer = Timer1Timer
-    Left = 456
-    Top = 344
+    Left = 720
+    Top = 8
   end
 end
