@@ -31,6 +31,7 @@ type
     procedure RenderScene;
     procedure Panel1Resize(Sender: TObject);
     procedure GenerateRandomCandles;
+    procedure CalculateMovingAverage(Period: Integer);
   public
   end;
 // Данные для свечей
@@ -43,6 +44,7 @@ end;
 var
   Form1: TForm1;
   FCandles: array of TCandleData;
+  FMovingAverage: array of Single; // Массив для скользящей средней
 implementation
 
 {$R *.dfm}
@@ -84,6 +86,33 @@ begin
 
   Randomize;
   GenerateRandomCandles;
+  CalculateMovingAverage(10); // Рассчитываем скользящую среднюю с периодом 10
+end;
+
+procedure TForm1.CalculateMovingAverage(Period: Integer);
+var
+  i, j: Integer;
+  Sum: Single;
+  Count: Integer;
+begin
+  SetLength(FMovingAverage, Length(FCandles));
+
+  for i := 0 to Length(FCandles) - 1 do begin
+    Sum := 0;
+    Count := 0;
+
+    // Суммируем Close цены за последние Period свечей
+    for j := Max(0, i - Period + 1) to i do begin
+      Sum := Sum + FCandles[j].Close;
+      Inc(Count);
+    end;
+
+    // Вычисляем среднее
+    if Count > 0 then
+      FMovingAverage[i] := Sum / Count
+    else
+      FMovingAverage[i] := 0;
+  end;
 end;
 
 procedure TForm1.GenerateRandomCandles;
@@ -302,6 +331,29 @@ begin
     end;
   end;
 
+  // Рисуем скользящую среднюю (Moving Average) - красная линия
+  if Length(FMovingAverage) > 1 then begin
+    glColor4f(1.0, 0.0, 0.0, 1.0); // Красный цвет
+    glLineWidth(2.0); // Толщина линии 2 пикселя
+
+    glBegin(GL_LINE_STRIP);
+
+    for i := 0 to Length(FMovingAverage) - 1 do begin
+      DataX := ChartLeft + (i * 16) + 8;
+
+      if DataX > ChartRight then Break;
+
+      // Пропускаем нулевые значения (недостаточно данных для MA)
+      if FMovingAverage[i] <= 0 then Continue;
+
+      var YMA: Single := ChartBottom - (FMovingAverage[i] * ChartHeight);
+
+      glVertex2f(DataX, YMA);
+    end;
+
+    glEnd;
+  end;
+
   SwapBuffers(DC);
 end;
 
@@ -310,6 +362,7 @@ begin
   if RC <> 0 then begin
     SetupViewport;
     GenerateRandomCandles;
+    CalculateMovingAverage(10);
     RenderScene;
   end;
 end;
@@ -352,6 +405,9 @@ begin
     if NewCandle.Close < 0.1 then NewCandle.Close := 0.1;
 
     FCandles[Length(FCandles) - 1] := NewCandle;
+
+    // Пересчитываем скользящую среднюю
+    CalculateMovingAverage(10);
   end;
 
   RenderScene;
