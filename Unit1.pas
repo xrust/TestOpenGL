@@ -26,10 +26,12 @@ type
     DC: HDC;
     RC: HGLRC;
     FCounter: Integer;
+    FChartData: array of Single; // Массив данных графика
     procedure InitOpenGL;
     procedure SetupViewport;
     procedure RenderScene;
     procedure Panel1Resize(Sender: TObject);
+    procedure GenerateRandomData;
   public
   end;
 
@@ -80,6 +82,37 @@ begin
   // Инициализация OpenGL
   InitOpenGL;
   SetupViewport;
+
+  // Генерируем случайные данные для графика
+  Randomize;
+  GenerateRandomData;
+end;
+
+procedure TForm1.GenerateRandomData;
+var
+  i, DataCount: Integer;
+  ChartWidth: Integer;
+  BaseValue, Delta: Single;
+begin
+  ChartWidth := Panel1.Width - 75 - 5; // Ширина графика
+  DataCount := (ChartWidth div 16) + 1; // Количество точек (каждые 16 пикселей)
+
+  SetLength(FChartData, DataCount);
+
+  // Генерируем случайные данные (плавные изменения)
+  BaseValue := 0.5; // Начальное значение (середина графика)
+
+  for i := 0 to DataCount - 1 do begin
+    // Добавляем случайное изменение
+    Delta := (Random - 0.5) * 0.1; // Изменение от -0.05 до +0.05
+    BaseValue := BaseValue + Delta;
+
+    // Ограничиваем значения от 0.1 до 0.9 (10%-90% высоты графика)
+    if BaseValue > 0.9 then BaseValue := 0.9;
+    if BaseValue < 0.1 then BaseValue := 0.1;
+
+    FChartData[i] := BaseValue;
+  end;
 end;
 
 procedure TForm1.FormDestroy(Sender: TObject);
@@ -147,6 +180,7 @@ var
   GridSize: Integer;
   x, y: Single;
   i: Integer;
+  DataX, DataY: Single;
 begin
   wglMakeCurrent(DC, RC);
 
@@ -170,9 +204,9 @@ begin
   glBegin(GL_POINTS);
 
   // Вертикальные линии сетки (точками)
-  x := ChartLeft+32;
-  while x <= ChartRight-1 do begin
-    y := ChartTop +1;
+  x := ChartLeft;
+  while x <= ChartRight do begin
+    y := ChartTop;
     while y <= ChartBottom do begin
       // Рисуем точку через каждые 2 пикселя (эффект пунктира)
       if Trunc(y - ChartTop) mod 4 < 2 then
@@ -183,10 +217,10 @@ begin
   end;
 
   // Горизонтальные линии сетки (точками)
-  y := ChartTop+1;
+  y := ChartTop;
   while y <= ChartBottom do begin
     x := ChartLeft;
-    while x <= ChartRight-1 do begin
+    while x <= ChartRight do begin
       // Рисуем точку через каждые 2 пикселя (эффект пунктира)
       if Trunc(x - ChartLeft) mod 4 < 2 then
         glVertex2f(x, y);
@@ -208,6 +242,29 @@ begin
     glVertex2f(ChartLeft, ChartBottom);
   glEnd;
 
+  // Рисуем график случайных данных (красная линия)
+  if Length(FChartData) > 1 then begin
+    glColor4f(1.0, 0.0, 0.0, 1.0); // Красный цвет
+    glLineWidth(1.0);
+
+    glBegin(GL_LINE_STRIP);
+
+    for i := 0 to Length(FChartData) - 1 do begin
+      // Вычисляем координаты точки
+      DataX := ChartLeft + (i * 32); // Каждые 16 пикселей по горизонтали
+
+      // Преобразуем значение данных (0.0-1.0) в координату Y графика
+      DataY := ChartBottom - (FChartData[i] * ChartHeight);
+
+      // Проверяем, что точка в пределах графика
+      if DataX > ChartRight then Break;
+
+      glVertex2f(DataX, DataY);
+    end;
+
+    glEnd;
+  end;
+
   SwapBuffers(DC);
 end;
 
@@ -215,6 +272,7 @@ procedure TForm1.Panel1Resize(Sender: TObject);
 begin
   if RC <> 0 then begin
     SetupViewport;
+    GenerateRandomData; // Пересоздаем данные при изменении размера
     RenderScene;
   end;
 end;
@@ -228,18 +286,45 @@ end;
 procedure TForm1.Timer1Timer(Sender: TObject);
 begin
   Inc(FCounter);
+
+  // Обновляем данные графика (добавляем новую точку)
+  if Length(FChartData) > 0 then begin
+    // Сдвигаем данные влево
+    Move(FChartData[1], FChartData[0], (Length(FChartData) - 1) * SizeOf(Single));
+
+    // Добавляем новую случайную точку в конец
+    var Delta: Single := (Random - 0.5) * 0.1;
+    var NewValue: Single := FChartData[Length(FChartData) - 2] + Delta;
+
+    if NewValue > 0.9 then NewValue := 0.9;
+    if NewValue < 0.1 then NewValue := 0.1;
+
+    FChartData[Length(FChartData) - 1] := NewValue;
+  end;
+
   RenderScene;
 end;
 
 procedure TForm1.Button1Click(Sender: TObject);
 begin
-  if Timer1.Enabled then begin
-    Timer1.Enabled := False;
-    Button1.Caption := 'Start';
-  end else begin
-    Timer1.Enabled := True;
-    Button1.Caption := 'Stop';
+Inc(FCounter);
+
+  // Обновляем данные графика (добавляем новую точку)
+  if Length(FChartData) > 0 then begin
+    // Сдвигаем данные влево
+    Move(FChartData[1], FChartData[0], (Length(FChartData) - 1) * SizeOf(Single));
+
+    // Добавляем новую случайную точку в конец
+    var Delta: Single := (Random - 0.5) * 0.1;
+    var NewValue: Single := FChartData[Length(FChartData) - 2] + Delta;
+
+    if NewValue > 0.9 then NewValue := 0.9;
+    if NewValue < 0.1 then NewValue := 0.1;
+
+    FChartData[Length(FChartData) - 1] := NewValue;
   end;
+
+  RenderScene;
 end;
 
 end.
